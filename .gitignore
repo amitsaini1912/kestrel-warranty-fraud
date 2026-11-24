@@ -1,0 +1,8 @@
+# Kestrel policy §10: customer/operational data must not go to a public repo.
+data/*.csv
+models/
+reports/backtest_rows.csv
+reports/watchlist.csv
+reports/screen.png
+__pycache__/
+.pytest_cache/
