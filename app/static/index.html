@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kestrel - Warranty claim check</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; color: #1d2433; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: #5b6475; margin-top: 0; }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; background: #f6f7f9; padding: 16px; border-radius: 8px; }
+  label { font-size: 12px; color: #5b6475; display: flex; flex-direction: column; gap: 4px; }
+  input, select { font-size: 14px; padding: 6px 8px; border: 1px solid #ccd2dc; border-radius: 6px; }
+  button { grid-column: span 2; padding: 10px; font-size: 15px; background: #1f4fd1; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  .row { display: flex; gap: 8px; grid-column: span 2; }
+  .row button { grid-column: auto; background: #e4e8f0; color: #1d2433; font-size: 13px; padding: 6px 10px; }
+  #out { margin-top: 18px; padding: 16px; border-radius: 8px; display: none; }
+  #out.review { background: #fff1f0; border: 1px solid #f3b5ae; }
+  #out.pay { background: #eefaf1; border: 1px solid #a9dcb6; }
+  #out h2 { margin: 0 0 6px; font-size: 18px; }
+  .err { background: #fff7e6 !important; border: 1px solid #f0c36d !important; }
+</style>
+</head>
+<body>
+<h1>Warranty claim check</h1>
+<p class="sub">Enter a claim as the partner submitted it. The tool says whether it is worth one of the desk's 40 monthly reviews, and why.</p>
+<form id="f">
+  <div class="row">
+    <button type="button" onclick="fill(ex1)">Example: auto-approved claim, flagged partner</button>
+    <button type="button" onclick="fill(ex2)">Example: ordinary claim</button>
+  </div>
+  <label>Claim ID <input name="claim_id" value="NEW-1"></label>
+  <label>Submitted at (IST) <input name="submitted_at" value="2026-07-14 11:05"></label>
+  <label>Partner ID <input name="partner_id" value="SP3160"></label>
+  <label>SKU <input name="sku" value="KH-AF-02"></label>
+  <label>Product serial <input name="product_serial" value="KH123456789"></label>
+  <label>Days since purchase <input name="days_since_purchase" type="number" value="60"></label>
+  <label>Claim amount (Rs) <input name="claim_amount_inr" type="number" value="1995"></label>
+  <label>Customer's earlier claims <input name="customer_prior_claims" type="number" value="1"></label>
+  <label>Photo attached <select name="photo_attached"><option>Y</option><option>N</option></select></label>
+  <label>Partner inspected <select name="partner_inspected"><option>N</option><option>Y</option></select></label>
+  <label>Fault description <input name="claim_description" value="unit not heating"></label>
+  <label>Inspector note <input name="inspector_note" value=""></label>
+  <button type="submit">Check claim</button>
+</form>
+<div id="out"></div>
+<script>
+const ex1 = {claim_id:"NEW-1", submitted_at:"2026-07-14 11:05", partner_id:"SP3160", sku:"KH-AF-02", product_serial:"KH123456789",
+  days_since_purchase:60, claim_amount_inr:1995, customer_prior_claims:1, photo_attached:"Y", partner_inspected:"N",
+  claim_description:"unit not heating", inspector_note:""};
+const ex2 = {claim_id:"NEW-2", submitted_at:"2026-07-14 11:05", partner_id:"SP3265", sku:"KH-MG-01", product_serial:"KH987654321",
+  days_since_purchase:200, claim_amount_inr:2600, customer_prior_claims:0, photo_attached:"Y", partner_inspected:"Y",
+  claim_description:"motor not running", inspector_note:"Motor winding failure confirmed"};
+function fill(o){ for (const k in o) document.querySelector(`[name=${k}]`).value = o[k]; }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+document.getElementById("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  ["days_since_purchase","customer_prior_claims"].forEach(k => d[k] = parseInt(d[k] || 0));
+  d.claim_amount_inr = parseFloat(d.claim_amount_inr);
+  if (!d.inspector_note) d.inspector_note = null;
+  const out = document.getElementById("out");
+  out.style.display = "block";
+  try {
+    const r = await fetch("/score", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(d)});
+    const j = await r.json();
+    if (!r.ok) { out.className = "err"; out.innerHTML = "<b>Could not score:</b> " + esc(typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail)); return; }
+    const review = j.decision.startsWith("SEND");
+    out.className = review ? "review" : "pay";
+    out.innerHTML = `<h2>${esc(j.decision)}</h2>
+      <div>Fraud likelihood: <b>${(j.fraud_probability*100).toFixed(1)}%</b> &middot;
+      Expected value of reviewing it: <b>Rs ${Math.round(j.expected_rupees_saved_by_review).toLocaleString("en-IN")}</b></div>
+      <ul>${j.reasons.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      <small>${esc(j.note)}</small>`;
+  } catch (err) { out.className = "err"; out.textContent = "Service not reachable: " + err; }
+});
+</script>
+</body>
+</html>
